@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_app_badger/flutter_app_badger.dart';
 import '../providers/habit_provider.dart';
 import '../models/habit.dart';
 import '../config/theme.dart';
@@ -19,10 +19,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isGoalsExpanded = true;
 
   @override
+  void initState() {
+    super.initState();
+    _updateAppBadge();
+  }
+
+  @override
+  void didUpdateWidget(DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateAppBadge();
+  }
+
+  Future<void> _updateAppBadge() async {
+    final habitProvider = Provider.of<HabitProvider>(context, listen: false);
+    final activeHabits = habitProvider.activeHabits;
+    final today = dateOnly(DateTime.now());
+    
+    final pendingCount = activeHabits.where((habit) {
+      final completion = habitProvider.getCompletionForDate(habit.id, today);
+      return !(completion?.completed ?? false);
+    }).length;
+    
+    if (pendingCount > 0) {
+      FlutterAppBadger.updateBadgeCount(pendingCount);
+    } else {
+      FlutterAppBadger.removeBadge();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final habitProvider = Provider.of<HabitProvider>(context);
     final summary = habitProvider.getTodaySummary();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Actualizar badge cuando cambian los datos
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateAppBadge();
+    });
 
     return Scaffold(
       body: SafeArea(
@@ -67,12 +101,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         children: [
           // Avatar
-          FutureBuilder<String?>(
-            future: habitProvider.getPreferences().then(
-              (prefs) => HabitService.getProfilePhoto(prefs),
-            ),
+          FutureBuilder<int>(
+            future: _calculateMaxStreak(habitProvider),
             builder: (context, snapshot) {
-              final photoPath = snapshot.data;
+              final maxStreak = snapshot.data ?? 0;
+              
+              // Determinar icono según el nivel (>30 días = Rey, ≤30 = Iniciante)
+              final isRey = maxStreak > 30;
+              final icon = isRey ? Icons.emoji_events : Icons.flag;
               
               return Stack(
                 children: [
@@ -81,22 +117,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     height: 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.primary, width: 2),
-                      gradient: photoPath == null
-                          ? const LinearGradient(
-                              colors: [AppTheme.primary, Color(0xFF10B981)],
-                            )
-                          : null,
-                      image: photoPath != null
-                          ? DecorationImage(
-                              image: FileImage(File(photoPath)),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                      border: Border.all(
+                        color: isRey ? const Color(0xFFFFD700) : AppTheme.primary,
+                        width: 2,
+                      ),
+                      gradient: LinearGradient(
+                        colors: isRey
+                            ? [const Color(0xFFFFD700), const Color(0xFFFFA500)]
+                            : [AppTheme.primary, const Color(0xFF10B981)],
+                      ),
                     ),
-                    child: photoPath == null
-                        ? const Icon(Icons.person, color: Colors.white)
-                        : null,
+                    child: Icon(
+                      icon,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                   ),
                   Positioned(
                     bottom: 0,
@@ -154,7 +189,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          // Settings Button
+          // Exercises Button
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/exercises');
+            },
+            icon: Icon(
+              Symbols.fitness_center,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          // Fasting Button
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/fasting');
+            },
+            icon: Icon(
+              Symbols.restaurant_menu,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          // Measurements Button
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/measurements');
+            },
+            icon: Icon(
+              Symbols.monitoring,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),          // Settings Button
           IconButton(
             onPressed: () {
               Navigator.pushNamed(context, '/settings');
@@ -169,11 +233,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  String _getStreakTitle(int streak) {
+    if (streak >= 30) return '👑 Rey';
+    if (streak >= 25) return '🤴 Príncipe';
+    if (streak >= 20) return '⚔️ Caballero';
+    if (streak >= 15) return '🛡️ Guerrero';
+    if (streak >= 10) return '⭐ Héroe';
+    if (streak >= 7) return '🌟 Destacado';
+    if (streak >= 5) return '💪 Fuerte';
+    if (streak >= 3) return '🔥 En Racha';
+    if (streak >= 1) return '🌱 Iniciando';
+    return '💤 Dormido';
+  }
+
   Widget _buildSummaryCard(
       BuildContext context, Map<String, dynamic> summary, bool isDark) {
     final percentage = summary['percentage'] as double;
     final completed = summary['completedHabits'] as int;
     final total = summary['totalHabits'] as int;
+    final currentStreak = summary['currentStreak'] ?? 0;
+    final streakTitle = _getStreakTitle(currentStreak as int);
 
     return Container(
       width: double.infinity,
@@ -219,33 +298,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               // Streak Badge
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.primary.withOpacity(0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      'Racha: ${summary['currentStreak'] ?? 0} días',
-                      style: const TextStyle(
-                        color: AppTheme.primary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppTheme.primary.withOpacity(0.3),
                       ),
                     ),
-                    SizedBox(width: 4),
-                    Text(
-                      '🔥',
-                      style: TextStyle(fontSize: 12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Racha: $currentStreak días',
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          '🔥',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    streakTitle,
+                    style: TextStyle(
+                      color: AppTheme.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -426,6 +520,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 12),
           // Calendar Grid
           GridView.builder(
+            key: ValueKey('heatmap_${habitProvider.habits.length}_${DateTime.now().millisecondsSinceEpoch}'),
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -546,10 +641,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isToday ? AppTheme.primary : backgroundColor,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(8),
         border: isToday
-            ? Border.all(color: Colors.white, width: 2)
+            ? Border.all(color: AppTheme.primary, width: 2)
             : null,
         boxShadow: isToday
             ? [
@@ -623,29 +718,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (pendingCount > 0) ...[
+                    if (pendingCount > 0 && !_isGoalsExpanded) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                          horizontal: 10,
+                          vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: _isGoalsExpanded
-                              ? AppTheme.primary.withOpacity(0.2)
-                              : AppTheme.primary,
-                          borderRadius: BorderRadius.circular(12),
-                          border: _isGoalsExpanded
-                              ? Border.all(color: AppTheme.primary, width: 1.5)
-                              : null,
+                          color: AppTheme.primary,
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Text(
                           '$pendingCount',
-                          style: TextStyle(
-                            color: _isGoalsExpanded
-                                ? AppTheme.primary
-                                : AppTheme.backgroundDark,
-                            fontSize: 12,
+                          style: const TextStyle(
+                            color: AppTheme.backgroundDark,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -723,6 +811,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 isDark,
                 () async {
                   await habitProvider.toggleCompletion(habit.id, today);
+                  _updateAppBadge();
                 },
                 () {
                   Navigator.pushNamed(
@@ -866,5 +955,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
 
     return iconMap[iconName] ?? Symbols.star;
+  }
+
+  Future<int> _calculateMaxStreak(HabitProvider habitProvider) async {
+    final prefs = await habitProvider.getPreferences();
+    final habitService = HabitService(prefs);
+    final habits = habitProvider.habits;
+    
+    int maxStreak = 0;
+    for (var habit in habits) {
+      final streak = habitService.getCurrentStreak(habit.id);
+      if (streak > maxStreak) {
+        maxStreak = streak;
+      }
+    }
+    
+    return maxStreak;
   }
 }

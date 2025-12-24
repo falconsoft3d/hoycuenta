@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
 import '../config/theme.dart';
 import '../providers/habit_provider.dart';
 import '../services/habit_service.dart';
@@ -17,7 +15,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _userName = 'Usuario';
   bool _isLoading = true;
   bool _isPinEnabled = false;
-  String? _profilePhoto;
 
   @override
   void initState() {
@@ -30,11 +27,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await habitProvider.getPreferences();
     final name = HabitService.getUserName(prefs);
     final pinEnabled = HabitService.isPinEnabled(prefs);
-    final photoPath = HabitService.getProfilePhoto(prefs);
     setState(() {
       _userName = name ?? 'Usuario';
       _isPinEnabled = pinEnabled;
-      _profilePhoto = photoPath;
       _isLoading = false;
     });
   }
@@ -89,89 +84,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
-  }
-
-  Future<void> _changeProfilePhoto() async {
-    final ImagePicker picker = ImagePicker();
-    
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera),
-              title: const Text('Tomar foto'),
-              onTap: () async {
-                Navigator.pop(context);
-                final XFile? image = await picker.pickImage(
-                  source: ImageSource.camera,
-                  maxWidth: 512,
-                  maxHeight: 512,
-                  imageQuality: 85,
-                );
-                if (image != null) {
-                  await _savePhoto(image.path);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Elegir de galería'),
-              onTap: () async {
-                Navigator.pop(context);
-                final XFile? image = await picker.pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 512,
-                  maxHeight: 512,
-                  imageQuality: 85,
-                );
-                if (image != null) {
-                  await _savePhoto(image.path);
-                }
-              },
-            ),
-            if (_profilePhoto != null)
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Eliminar foto', style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final habitProvider = Provider.of<HabitProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final prefs = await habitProvider.getPreferences();
-                  await HabitService.removeProfilePhoto(prefs);
-                  setState(() {
-                    _profilePhoto = null;
-                  });
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Foto eliminada')),
-                    );
-                  }
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _savePhoto(String path) async {
-    final habitProvider = Provider.of<HabitProvider>(context, listen: false);
-    final prefs = await habitProvider.getPreferences();
-    await HabitService.saveProfilePhoto(prefs, path);
-    setState(() {
-      _profilePhoto = path;
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto actualizada')),
-      );
-    }
   }
 
   Future<void> _togglePin() async {
@@ -301,13 +213,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildSection(
                   'Usuario',
                   [
-                    _buildListTile(
-                      icon: Icons.photo_camera,
-                      title: 'Foto de perfil',
-                      subtitle: _profilePhoto != null ? 'Personalizada' : 'Sin foto',
-                      onTap: _changeProfilePhoto,
-                      isDark: isDark,
-                    ),
                     _buildListTile(
                       icon: Icons.person,
                       title: 'Nombre',

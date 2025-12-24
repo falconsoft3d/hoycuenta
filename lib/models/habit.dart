@@ -8,6 +8,7 @@ class Habit {
   final String colorHex;
   final DateTime createdAt;
   bool isActive;
+  DateTime? activeSessionStart; // Timestamp cuando se inició la sesión actual
 
   Habit({
     required this.id,
@@ -18,6 +19,7 @@ class Habit {
     required this.colorHex,
     required this.createdAt,
     this.isActive = true,
+    this.activeSessionStart,
   });
 
   Map<String, dynamic> toJson() {
@@ -30,6 +32,7 @@ class Habit {
       'colorHex': colorHex,
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive,
+      'activeSessionStart': activeSessionStart?.toIso8601String(),
     };
   }
 
@@ -45,6 +48,9 @@ class Habit {
       colorHex: json['colorHex'],
       createdAt: DateTime.parse(json['createdAt']),
       isActive: json['isActive'] ?? true,
+      activeSessionStart: json['activeSessionStart'] != null
+          ? DateTime.parse(json['activeSessionStart'])
+          : null,
     );
   }
 
@@ -57,6 +63,7 @@ class Habit {
     String? colorHex,
     DateTime? createdAt,
     bool? isActive,
+    DateTime? activeSessionStart,
   }) {
     return Habit(
       id: id ?? this.id,
@@ -67,6 +74,7 @@ class Habit {
       colorHex: colorHex ?? this.colorHex,
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
+      activeSessionStart: activeSessionStart ?? this.activeSessionStart,
     );
   }
 }
@@ -107,6 +115,7 @@ class HabitCompletion {
   final bool completed;
   final int? progress; // Opcional, para hábitos con progreso (ej: 1500ml de 2000ml)
   final int? target; // Meta del día
+  final int? minutes; // Minutos dedicados al hábito en este día
 
   HabitCompletion({
     required this.habitId,
@@ -114,6 +123,7 @@ class HabitCompletion {
     required this.completed,
     this.progress,
     this.target,
+    this.minutes,
   });
 
   Map<String, dynamic> toJson() {
@@ -123,6 +133,7 @@ class HabitCompletion {
       'completed': completed,
       'progress': progress,
       'target': target,
+      'minutes': minutes,
     };
   }
 
@@ -133,6 +144,7 @@ class HabitCompletion {
       completed: json['completed'],
       progress: json['progress'],
       target: json['target'],
+      minutes: json['minutes'],
     );
   }
 
@@ -147,6 +159,7 @@ class HabitCompletion {
     bool? completed,
     int? progress,
     int? target,
+    int? minutes,
   }) {
     return HabitCompletion(
       habitId: habitId ?? this.habitId,
@@ -154,6 +167,7 @@ class HabitCompletion {
       completed: completed ?? this.completed,
       progress: progress ?? this.progress,
       target: target ?? this.target,
+      minutes: minutes ?? this.minutes,
     );
   }
 }

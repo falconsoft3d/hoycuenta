@@ -2,22 +2,82 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
+import 'dart:ui';
 import '../providers/habit_provider.dart';
 import '../models/habit.dart';
 import '../config/theme.dart';
 
-class HabitDetailScreen extends StatelessWidget {
+class HabitDetailScreen extends StatefulWidget {
   final Habit habit;
 
   const HabitDetailScreen({super.key, required this.habit});
 
   @override
+  State<HabitDetailScreen> createState() => _HabitDetailScreenState();
+}
+
+class _HabitDetailScreenState extends State<HabitDetailScreen> {
+  Timer? _timer;
+  Duration _elapsedTime = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActiveSession();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _checkActiveSession() {
+    final habitProvider = Provider.of<HabitProvider>(context, listen: false);
+    final currentHabit = habitProvider.getHabit(widget.habit.id);
+    
+    if (currentHabit?.activeSessionStart != null) {
+      _elapsedTime = DateTime.now().difference(currentHabit!.activeSessionStart!);
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        final habitProvider = Provider.of<HabitProvider>(context, listen: false);
+        final currentHabit = habitProvider.getHabit(widget.habit.id);
+        
+        if (currentHabit?.activeSessionStart != null) {
+          _elapsedTime = DateTime.now().difference(currentHabit!.activeSessionStart!);
+        }
+      });
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$hours:$minutes:$seconds';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final habitProvider = Provider.of<HabitProvider>(context);
+    final currentHabit = habitProvider.getHabit(widget.habit.id) ?? widget.habit;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final streak = habitProvider.getCurrentStreak(habit.id);
+    final streak = habitProvider.getCurrentStreak(currentHabit.id);
     final completionRate =
-        habitProvider.getCompletionRate(habit.id, days: 30);
+        habitProvider.getCompletionRate(currentHabit.id, days: 30);
+    final hasActiveSession = currentHabit.activeSessionStart != null;
 
     return Scaffold(
       body: SafeArea(
@@ -57,7 +117,7 @@ class HabitDetailScreen extends StatelessWidget {
                   children: [
                     // Header Info
                     Text(
-                      '${habit.frequency.displayName.toUpperCase()} • SALUD',
+                      '${currentHabit.frequency.displayName.toUpperCase()} • SALUD',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -67,7 +127,7 @@ class HabitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      habit.name,
+                      currentHabit.name,
                       style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
@@ -76,7 +136,7 @@ class HabitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      habit.description ?? 'Sin descripción',
+                      currentHabit.description ?? 'Sin descripción',
                       style: TextStyle(
                         fontSize: 14,
                         color: isDark
@@ -87,8 +147,12 @@ class HabitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     
+                    // Timer Card
+                    _buildTimerCard(context, habitProvider, currentHabit, isDark, hasActiveSession),
+                    const SizedBox(height: 16),
+                    
                     // Hero Card - Today's Progress
-                    _buildProgressCard(context, habitProvider, isDark),
+                    _buildProgressCard(context, habitProvider, currentHabit, isDark),
                     const SizedBox(height: 16),
                     
                     // Stats Row
@@ -118,7 +182,7 @@ class HabitDetailScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     
                     // History Calendar
-                    _buildHistorySection(context, habitProvider, isDark),
+                    _buildHistorySection(context, habitProvider, currentHabit, isDark),
                     
                     const SizedBox(height: 32),
                     
@@ -158,13 +222,113 @@ class HabitDetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildTimerCard(
+    BuildContext context,
+    HabitProvider habitProvider,
+    Habit currentHabit,
+    bool isDark,
+    bool hasActiveSession,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.black.withOpacity(0.05),
+        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Symbols.timer,
+            size: 48,
+            color: AppTheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            hasActiveSession ? 'Sesión en progreso' : 'Tiempo de hábito',
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark
+                  ? AppTheme.textSecondaryDark
+                  : AppTheme.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasActiveSession ? _formatDuration(_elapsedTime) : '00:00:00',
+            style: const TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.bold,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                if (hasActiveSession) {
+                  await habitProvider.finishSession(currentHabit.id);
+                  _stopTimer();
+                  setState(() {
+                    _elapsedTime = Duration.zero;
+                  });
+                  if (context.mounted) {
+                    // Calcular minutos antes de que se limpie la sesión
+                    final minutes = _elapsedTime.inMinutes;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Sesión finalizada: $minutes minutos',
+                        ),
+                        backgroundColor: AppTheme.primary,
+                      ),
+                    );
+                  }
+                } else {
+                  await habitProvider.startSession(currentHabit.id);
+                  _startTimer();
+                }
+              },
+              icon: Icon(
+                hasActiveSession ? Symbols.stop_circle : Symbols.play_circle,
+                size: 20,
+              ),
+              label: Text(
+                hasActiveSession ? 'Finalizar' : 'Iniciar',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: hasActiveSession ? Colors.red : AppTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProgressCard(
     BuildContext context,
     HabitProvider habitProvider,
+    Habit currentHabit,
     bool isDark,
   ) {
     final today = dateOnly(DateTime.now());
-    final completion = habitProvider.getCompletionForDate(habit.id, today);
+    final completion = habitProvider.getCompletionForDate(currentHabit.id, today);
     final isCompleted = completion?.completed ?? false;
 
     return Container(
@@ -190,8 +354,8 @@ class HabitDetailScreen extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(int.parse(habit.colorHex)).withOpacity(0.3),
-                  Color(int.parse(habit.colorHex)).withOpacity(0.1),
+                  Color(int.parse(currentHabit.colorHex)).withOpacity(0.3),
+                  Color(int.parse(currentHabit.colorHex)).withOpacity(0.1),
                 ],
               ),
             ),
@@ -199,9 +363,9 @@ class HabitDetailScreen extends StatelessWidget {
               children: [
                 Center(
                   child: Icon(
-                    _getIconData(habit.icon),
+                    _getIconData(currentHabit.icon),
                     size: 80,
-                    color: Color(int.parse(habit.colorHex)),
+                    color: Color(int.parse(currentHabit.colorHex)),
                   ),
                 ),
                 Positioned(
@@ -325,7 +489,7 @@ class HabitDetailScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () async {
-                      await habitProvider.toggleCompletion(habit.id, today);
+                      await habitProvider.toggleCompletion(currentHabit.id, today);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,
@@ -421,6 +585,7 @@ class HabitDetailScreen extends StatelessWidget {
   Widget _buildHistorySection(
     BuildContext context,
     HabitProvider habitProvider,
+    Habit currentHabit,
     bool isDark,
   ) {
     return Column(
@@ -531,15 +696,16 @@ class HabitDetailScreen extends StatelessWidget {
 
         final day = index - startWeekday + 2;
         final date = DateTime(now.year, now.month, day);
-        final completion = habitProvider.getCompletionForDate(habit.id, date);
+        final completion = habitProvider.getCompletionForDate(widget.habit.id, date);
         final isCompleted = completion?.completed ?? false;
         final isFuture = date.isAfter(now);
+        final minutes = completion?.minutes ?? 0;
 
         return GestureDetector(
           onTap: isFuture
               ? null
               : () async {
-                  await habitProvider.toggleCompletion(habit.id, date);
+                  await habitProvider.toggleCompletion(widget.habit.id, date);
                 },
           child: Container(
             decoration: BoxDecoration(
@@ -569,23 +735,37 @@ class HabitDetailScreen extends StatelessWidget {
                     ]
                   : null,
             ),
-            child: Center(
-              child: Text(
-                '$day',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
-                  color: isCompleted
-                      ? AppTheme.backgroundDark
-                      : (isFuture
-                          ? (isDark
-                              ? Colors.white.withOpacity(0.2)
-                              : Colors.grey[400])
-                          : (isDark
-                              ? AppTheme.textSecondaryDark
-                              : AppTheme.textSecondaryLight)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$day',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
+                    color: isCompleted
+                        ? AppTheme.backgroundDark
+                        : (isFuture
+                            ? (isDark
+                                ? Colors.white.withOpacity(0.2)
+                                : Colors.grey[400])
+                            : (isDark
+                                ? AppTheme.textSecondaryDark
+                                : AppTheme.textSecondaryLight)),
+                  ),
                 ),
-              ),
+                if (minutes > 0)
+                  Text(
+                    '${minutes}m',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w600,
+                      color: isCompleted
+                          ? AppTheme.backgroundDark
+                          : AppTheme.primary,
+                    ),
+                  ),
+              ],
             ),
           ),
         );
@@ -608,7 +788,7 @@ class HabitDetailScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              habitProvider.deleteHabit(habit.id);
+              habitProvider.deleteHabit(widget.habit.id);
               Navigator.pop(context); // Close dialog
               Navigator.pop(context); // Return to previous screen
             },

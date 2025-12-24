@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../models/habit.dart';
 import '../providers/habit_provider.dart';
 import '../services/habit_service.dart';
+import 'dashboard_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -415,7 +416,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       // Navegar al dashboard
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const DashboardScreen(),
+          ),
+        );
       }
     }
   }

@@ -1,5 +1,5 @@
 name: hoycuenta
-description: "A new Flutter project."
+description: "Controla tus hábitos, ejercicios, mediciones y ayuno intermitente. Construye rutinas saludables con seguimiento diario."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -49,7 +49,10 @@ dependencies:
   
   # Icons
   material_symbols_icons: ^4.2719.3
-  image_picker: ^1.2.1
+  flutter_app_badger: ^1.5.0
+  
+  # Keep screen awake
+  wakelock_plus: ^1.2.8
 
 dev_dependencies:
   flutter_test:

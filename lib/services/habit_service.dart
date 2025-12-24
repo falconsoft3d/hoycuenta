@@ -182,6 +182,100 @@ class HabitService {
     await _prefs.setString(_completionsKey, completionsJson);
   }
 
+  // === SESIONES DE TIEMPO ===
+
+  // Iniciar sesión de tiempo para un hábito
+  Future<void> startSession(String habitId) async {
+    final habits = getAllHabits();
+    final habitIndex = habits.indexWhere((h) => h.id == habitId);
+    
+    if (habitIndex != -1) {
+      habits[habitIndex] = habits[habitIndex].copyWith(
+        activeSessionStart: DateTime.now(),
+      );
+      await _saveHabits(habits);
+    }
+  }
+
+  // Finalizar sesión de tiempo y guardar los minutos
+  Future<void> finishSession(String habitId) async {
+    final habits = getAllHabits();
+    final habitIndex = habits.indexWhere((h) => h.id == habitId);
+    
+    if (habitIndex != -1) {
+      final habit = habits[habitIndex];
+      if (habit.activeSessionStart != null) {
+        // Calcular minutos transcurridos
+        final duration = DateTime.now().difference(habit.activeSessionStart!);
+        final minutes = duration.inMinutes;
+        
+        // Guardar o actualizar el completion con los minutos
+        await _addMinutesToCompletion(habitId, DateTime.now(), minutes);
+        
+        // Limpiar la sesión activa creando un nuevo hábito sin activeSessionStart
+        habits[habitIndex] = Habit(
+          id: habit.id,
+          name: habit.name,
+          description: habit.description,
+          frequency: habit.frequency,
+          icon: habit.icon,
+          colorHex: habit.colorHex,
+          createdAt: habit.createdAt,
+          isActive: habit.isActive,
+          activeSessionStart: null, // Explícitamente null
+        );
+        await _saveHabits(habits);
+      }
+    }
+  }
+
+  // Agregar minutos a un completion existente o crear uno nuevo
+  Future<void> _addMinutesToCompletion(
+    String habitId,
+    DateTime date,
+    int minutes,
+  ) async {
+    final completions = getAllCompletions();
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    final existingIndex = completions.indexWhere(
+      (c) =>
+          c.habitId == habitId &&
+          c.date.year == dateOnly.year &&
+          c.date.month == dateOnly.month &&
+          c.date.day == dateOnly.day,
+    );
+
+    if (existingIndex != -1) {
+      // Sumar minutos al completion existente
+      final currentMinutes = completions[existingIndex].minutes ?? 0;
+      completions[existingIndex] = completions[existingIndex].copyWith(
+        minutes: currentMinutes + minutes,
+        completed: true, // Marcar como completado si hay tiempo registrado
+      );
+    } else {
+      // Crear nuevo completion con minutos
+      completions.add(HabitCompletion(
+        habitId: habitId,
+        date: dateOnly,
+        completed: true,
+        minutes: minutes,
+      ));
+    }
+
+    await _saveCompletions(completions);
+  }
+
+  // Obtener el hábito con su sesión activa
+  Habit? getHabit(String habitId) {
+    final habits = getAllHabits();
+    try {
+      return habits.firstWhere((h) => h.id == habitId);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // === ESTADÍSTICAS ===
 
   // Obtener racha actual (días consecutivos completados)

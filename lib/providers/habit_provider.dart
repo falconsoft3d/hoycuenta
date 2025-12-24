@@ -72,4 +72,19 @@ class HabitProvider extends ChangeNotifier {
   List<HabitCompletion> getCompletionsForHabit(String habitId) {
     return _habitService.getCompletionsForHabit(habitId);
   }
+
+  // Métodos para sesiones de tiempo
+  Future<void> startSession(String habitId) async {
+    await _habitService.startSession(habitId);
+    _loadData();
+  }
+
+  Future<void> finishSession(String habitId) async {
+    await _habitService.finishSession(habitId);
+    _loadData();
+  }
+
+  Habit? getHabit(String habitId) {
+    return _habitService.getHabit(habitId);
+  }
 }
